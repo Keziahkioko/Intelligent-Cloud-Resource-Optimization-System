@@ -17,16 +17,18 @@ from sklearn.ensemble       import (RandomForestClassifier,
                                      AdaBoostClassifier)
 from sklearn.svm            import SVC
 from sklearn.neighbors      import KNeighborsClassifier
-from sklearn.metrics        import (accuracy_score, f1_score,
+from sklearn.metrics        import (accuracy_score, f1_score,precision_score,recall_score,
                                      classification_report,
                                      confusion_matrix,
                                      roc_auc_score, roc_curve)
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, learning_curve
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, callbacks
 import warnings
 warnings.filterwarnings('ignore')
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 # =============================================================
 # 2B.1  MODEL ZOO — All Classification Models
@@ -38,22 +40,15 @@ def build_classification_models():
         'Logistic Regression':   LogisticRegression(
                                      max_iter=500, random_state=42),
         'LDA (Generative)':      LinearDiscriminantAnalysis(),
-        'QDA (Generative)':      QuadraticDiscriminantAnalysis(),
+        'QDA (Generative)': QuadraticDiscriminantAnalysis(reg_param=0.1),
         'Naïve Bayes':           GaussianNB(),
-
-        # ── Non-Parametric (Week 5) ───────────────────────────
-        'KNN (k=5)':             KNeighborsClassifier(n_neighbors=5),
-        'KNN (k=15)':            KNeighborsClassifier(n_neighbors=15),
 
         # ── Tree-Based (Week 6) ───────────────────────────────
         'Decision Tree':         DecisionTreeClassifier(
                                      max_depth=8, random_state=42),
         'Random Forest':         RandomForestClassifier(
                                      n_estimators=100, random_state=42),
-        'Gradient Boosting':     GradientBoostingClassifier(
-                                     n_estimators=100, random_state=42),
-        'AdaBoost':              AdaBoostClassifier(
-                                     n_estimators=100, random_state=42),
+       
 
         # ── SVM (Week 8) ──────────────────────────────────────
         'SVM (RBF)':             SVC(kernel='rbf', C=10,
@@ -76,39 +71,101 @@ def train_and_evaluate_classification(data: dict) -> pd.DataFrame:
     models  = build_classification_models()
     records = []
 
-    print("=" * 80)
-    print("  STAGE 2B — Classification Model Comparison")
-    print("=" * 80)
-    print(f"\n  {'Model':<24} {'Train Acc':>10} {'Val Acc':>10} "
-          f"{'Test Acc':>10} {'F1':>9} {'CV Mean':>10}")
-    print(f"  {'─'*24} {'─'*10} {'─'*10} {'─'*10} {'─'*9} {'─'*10}")
+    print("=" * 145)
+    print(" " * 35 + "STAGE 2B — Classification Model Comparison")
+    print("=" * 145)
+
+    print(
+        f"\n{'Model':<24}"
+        f"{'Train':>10}"
+        f"{'Val':>10}"
+        f"{'Test':>10}"
+        f"{'Precision':>12}"
+        f"{'Recall':>10}"
+        f"{'F1':>10}"
+        f"{'ROC-AUC':>12}"
+        f"{'CV Mean':>14}"
+    )
+
+    print("-" * 145)
 
     for name, model in models.items():
-        model.fit(X_tr, y_tr)
 
-        train_acc = model.score(X_tr, y_tr)
-        val_acc   = model.score(X_va, y_va)
-        test_acc  = model.score(X_te, y_te)
-        f1        = f1_score(y_te, model.predict(X_te),
-                             average='weighted')
-        cv_scores = cross_val_score(model, X_tr, y_tr, cv=5,
-                                     scoring='accuracy')
+        try:
+            model.fit(X_tr, y_tr)
 
-        print(f"  {name:<24} {train_acc:>10.4f} {val_acc:>10.4f} "
-              f"{test_acc:>10.4f} {f1:>9.4f} "
-              f"{cv_scores.mean():>10.4f}±{cv_scores.std():.3f}")
+            train_acc = model.score(X_tr, y_tr)
+            val_acc   = model.score(X_va, y_va)
+            test_acc  = model.score(X_te, y_te)
 
-        records.append({
-            'Model':     name,
-            'Train Acc': train_acc,
-            'Val Acc':   val_acc,
-            'Test Acc':  test_acc,
-            'F1':        f1,
-            'CV Mean':   cv_scores.mean(),
-            'CV Std':    cv_scores.std(),
-            'Overfit':   train_acc - test_acc,
-            'fitted':    model
-        })
+            y_pred = model.predict(X_te)
+
+            precision = precision_score(
+                y_te, y_pred,
+                average="weighted",
+                zero_division=0
+            )
+
+            recall = recall_score(
+                y_te, y_pred,
+                average="weighted",
+                zero_division=0
+            )
+
+            f1 = f1_score(
+                y_te,
+                y_pred,
+                average="weighted"
+            )
+
+            try:
+                y_prob = model.predict_proba(X_te)
+                auc = roc_auc_score(
+                    y_te,
+                    y_prob,
+                    multi_class="ovr",
+                    average="weighted"
+                )
+            except Exception:
+                auc = np.nan
+
+            cv_scores = cross_val_score(
+                model,
+                X_tr,
+                y_tr,
+                cv=5,
+                scoring="accuracy"
+            )
+
+            print(
+                f"{name:<24}"
+                f"{train_acc:>10.4f}"
+                f"{val_acc:>10.4f}"
+                f"{test_acc:>10.4f}"
+                f"{precision:>12.4f}"
+                f"{recall:>10.4f}"
+                f"{f1:>10.4f}"
+                f"{auc:>12.4f}"
+                f"{cv_scores.mean():>10.4f} ± {cv_scores.std():.3f}"
+            )
+
+            records.append({
+                "Model": name,
+                "Train Acc": train_acc,
+                "Val Acc": val_acc,
+                "Test Acc": test_acc,
+                "Precision": precision,
+                "Recall": recall,
+                "F1": f1,
+                "ROC-AUC": auc,
+                "CV Mean": cv_scores.mean(),
+                "CV Std": cv_scores.std(),
+                "Overfit": train_acc - test_acc,
+                "fitted": model
+            })
+
+        except Exception as e:
+            print(f"{name:<24} FAILED -> {e}")
 
     return pd.DataFrame(records).sort_values('Test Acc', ascending=False)
 
@@ -184,6 +241,10 @@ def generative_vs_discriminative_analysis(data: dict) -> None:
     plt.tight_layout()
     plt.savefig("stage2b_gen_vs_disc.png", dpi=150, bbox_inches='tight')
     plt.show()
+    print("\nLearning Curve Interpretation:")
+    print("- Small gap between training and validation curves indicates good generalisation.")
+    print("- Large gap suggests overfitting.")
+    print("- Both curves converging at a low accuracy may indicate underfitting.")
 
 
 # =============================================================
@@ -223,3 +284,97 @@ def plot_confusion_matrices(results_df: pd.DataFrame,
                 dpi=150, bbox_inches='tight')
     plt.show()
     print("\n  ✅ Stage 2B Complete")
+
+
+# =============================================================
+# MAIN PROGRAM
+# =============================================================
+
+if __name__ == "__main__":
+
+    print("=" * 80)
+    print("INTELLIGENT CLOUD RESOURCE OPTIMIZATION SYSTEM")
+    print("STAGE 2B - CLASSIFICATION PIPELINE")
+    print("=" * 80)
+    print("\nLoading cleaned dataset...")
+
+    df = pd.read_csv("cloud_performance_features.csv")
+
+    print(f"Dataset loaded successfully.")
+    print(f"Shape: {df.shape}")
+   
+    feature_columns = [
+    "cpu_usage",
+    "memory_usage",
+    "network_traffic",
+    "power_consumption",
+    "num_executed_instructions",
+    "execution_time",
+    "energy_efficiency",
+    "cpu_memory_ratio",
+    "power_per_instruction",
+    "throughput",
+    "system_load_index",
+    "cpu_power_interaction",
+    "task_type_encoded",
+    "task_priority_encoded",
+    "cpu_load_level_encoded",
+    "exec_time_bucket_encoded"
+]
+
+    X = df[feature_columns]
+    print("\nFeatures being used:")
+    print(X.columns.tolist())
+    print(f"\nNumber of features: {X.shape[1]}")
+    y = df["task_status_encoded"]
+    print("\nOverall Class Distribution")
+    print(y.value_counts())
+    print(y.value_counts(normalize=True))
+    X_train, X_temp, y_train, y_temp = train_test_split(
+        X,
+        y,
+        test_size=0.30,
+        random_state=42,
+        stratify=y
+    )
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp,
+        y_temp,
+        test_size=0.50,
+        random_state=42,
+        stratify=y_temp
+    )
+    print("\nTraining Set Class Distribution")
+    print(y_train.value_counts(normalize=True))
+    scaler = StandardScaler()
+
+    X_train = scaler.fit_transform(X_train)
+
+    X_val = scaler.transform(X_val)
+
+    X_test = scaler.transform(X_test)
+    data = {
+        "X_train": X_train,
+        "X_val": X_val,
+        "X_test": X_test,
+        "y_train": y_train,
+        "y_val": y_val,
+        "y_test": y_test
+    }
+    print("\nTraining classification models...")
+    results_df = train_and_evaluate_classification(data)
+
+    print("\nModel Ranking")
+    print(results_df.drop(columns=["fitted"]))
+
+    plot_confusion_matrices(results_df, data)
+
+    generative_vs_discriminative_analysis(data)
+
+    results_df.drop(columns=["fitted"]).to_csv(
+        "stage2b_classification_results.csv",
+        index=False
+    )
+
+    print("\nResults saved to stage2b_classification_results.csv")
+
