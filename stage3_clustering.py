@@ -11,7 +11,7 @@ from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_har
 # ==========================================
 # 1. DATA LOADING & PREPROCESSING
 # ==========================================
-# Use the absolute path for the Lightning AI Studio root directory
+
 clean_data_path = '/teamspace/studios/this_studio/cloud_performance_features.csv'
 
 if os.path.exists(clean_data_path):
@@ -38,7 +38,7 @@ silhouette_scores = []
 K_range = range(2, 11)
 
 for k in K_range:
-    print(f" -> Calculating for K={k}...") # Added this so you can track progress!
+    print(f" -> Calculating for K={k}...") 
     kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
     labels = kmeans.fit_predict(X_scaled)
     inertia.append(kmeans.inertia_)
@@ -66,12 +66,12 @@ axes[1].set_ylabel('Silhouette Score')
 
 plt.tight_layout()
 plt.savefig('kmeans_sweeps.png')
-# plt.show() # Kept commented out!
+# plt.show() 
 
-# ==========================================
+
 # 3. TRAIN FINAL MODELS & EVALUATE
-# ==========================================
-# Assuming optimal K is 4 based on typical sweeps (adjust based on your actual plot!)
+
+# Assuming optimal K is 4 based on typical sweeps 
 optimal_k = 4 
 print(f"\nTraining final models with K={optimal_k}...")
 
@@ -96,9 +96,8 @@ print("\n--- KMeans Evaluation Metrics ---")
 for metric, score in metrics.items():
     print(f"{metric}: {score:.4f}")
 
-# ==========================================
 # 4. 2D PCA VISUALIZATION
-# ==========================================
+
 print("\nApplying PCA for 2D visualization...")
 pca = PCA(n_components=2, random_state=42)
 X_pca = pca.fit_transform(X_scaled)
@@ -118,6 +117,6 @@ plt.xlabel(f'Principal Component 1 ({variance_explained[0]:.1f}% variance)')
 plt.ylabel(f'Principal Component 2 ({variance_explained[1]:.1f}% variance)')
 plt.legend(title='Cluster')
 plt.savefig('pca_clusters_2d.png')
-# plt.show() # Kept commented out!
+# plt.show() 
 
 print("\nPipeline complete! Visualizations saved as PNG files.")
