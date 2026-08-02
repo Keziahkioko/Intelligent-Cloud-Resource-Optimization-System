@@ -5,6 +5,15 @@
 > reinforcement learning, and a unified final dashboard.
 
 ---
+## 👥 Group Members
+
+| Name | Registration Number | GitHub Username | Assigned Stage |
+|------|---------------------|------------------|----------------|
+| Keziah Kioko | C026-01-0735/2023 | Keziahkioko | Stage 1 — EDA |
+| Keith Ndarwa | C026-01-2228/2023 | Keithwise1 | Stage 2A — Regression |
+| Wilkister Kawira | C026-01-0727/2023 | will-genius | Stage 2B — Classification |
+| Mark Mugai | C026-01-0733/2023 | MarkMugai | Stage 3 — Clustering |
+| Zachary Aduwa | C026-01-0764/2023 | Zach-Tedd | Stage 4 — RL & Report |
 
 ## 📋 Table of Contents
 
