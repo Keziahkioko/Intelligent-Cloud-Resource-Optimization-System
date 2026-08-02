@@ -1,0 +1,32 @@
+{
+  "regression": {},
+  "classification": {},
+  "clustering": {},
+  "learning_theory": {},
+  "reinforcement_learning": {
+    "q_learning": {
+      "mean_reward": 172.0260000000002,
+      "std_reward": 11.138452495746439,
+      "sla_violation_pct": 13.68
+    },
+    "dqn": {
+      "mean_reward": 110.77400000000014,
+      "std_reward": 18.33506814822358,
+      "sla_violation_pct": 13.3
+    },
+    "random_baseline": {
+      "mean_reward": 31.215999999999966,
+      "std_reward": 15.302906390617427,
+      "sla_violation_pct": 13.38
+    },
+    "best_agent": "Q-Learning",
+    "meets_sla_target": false
+  },
+  "leaderboard": [
+    {
+      "Stage": "Reinforcement Learning",
+      "Best Approach": "Q-Learning",
+      "Key Metric": "SLA viol=13.30%"
+    }
+  ]
+}

@@ -926,7 +926,7 @@ def visualise_rl(ql_log:     dict,
                rand_eval['rewards']]  
     blabels = ['Q-Learning', 'DQN', 'Random']  
     bcolors = [C['blue'], C['red'], C['grey']]  
-    bp = ax.boxplot(bdata, labels=blabels, patch_artist=True,  
+    bp = ax.boxplot(bdata, tick_labels=blabels, patch_artist=True,  
                      medianprops=dict(color='black', linewidth=2.2),  
                      whiskerprops=dict(linewidth=1.6),  
                      capprops=dict(linewidth=1.6),  
@@ -1268,7 +1268,131 @@ class ResultsAggregator:
         print(f"  [CLF]  Best → {self.classification['best_model']}  "  
               f"Acc={self.classification['test_acc']:.4f}")  
 
-    def add_clustering(self, clust_res: dict):  
-        self.clustering = {  
-            algo: {  
-                'silhouette': float(res.get('score', 0)),
+    def add_clustering(self, clust_res: dict):
+        self.clustering = {
+            algo: {
+                'silhouette':        float(res.get('score', 0)),
+                'davies_bouldin':    float(res.get('davies_bouldin', 0)),
+                'calinski_harabasz': float(res.get('calinski_harabasz', 0)),
+                'n_clusters':        int(res.get('n_clusters', 0)),
+            }
+            for algo, res in clust_res.items()
+        }
+        for algo, res in self.clustering.items():
+            print(f"  [CLU]  {algo:<15} Silhouette={res['silhouette']:.4f}")
+
+    def add_learning_theory(self, lt_res: dict):
+        self.learning_theory = {
+            'bias_variance':   lt_res.get('bias_variance', {}),
+            'best_regulariser': lt_res.get('best_regulariser', '—'),
+            'notes':           lt_res.get('notes', ''),
+        }
+        print(f"  [LT ]  Learning-theory summary added")
+
+    def add_rl(self, rl_results: dict):
+        """Ingest the dict returned by run_stage4()."""
+        ql_eval   = rl_results['ql_eval']
+        dqn_eval  = rl_results['dqn_eval']
+        rand_eval = rl_results['rand_eval']
+
+        self.rl = {
+            'q_learning': {
+                'mean_reward': float(ql_eval['mean_reward']),
+                'std_reward':  float(ql_eval['std_reward']),
+                'sla_violation_pct': float(ql_eval['sla_rate'] * 100),
+            },
+            'dqn': {
+                'mean_reward': float(dqn_eval['mean_reward']),
+                'std_reward':  float(dqn_eval['std_reward']),
+                'sla_violation_pct': float(dqn_eval['sla_rate'] * 100),
+            },
+            'random_baseline': {
+                'mean_reward': float(rand_eval['mean_reward']),
+                'std_reward':  float(rand_eval['std_reward']),
+                'sla_violation_pct': float(rand_eval['sla_rate'] * 100),
+            },
+            'best_agent': 'DQN' if dqn_eval['mean_reward'] >= ql_eval['mean_reward'] else 'Q-Learning',
+            'meets_sla_target': bool(min(ql_eval['sla_rate'], dqn_eval['sla_rate']) < 0.10),
+        }
+        best = self.rl['best_agent']
+        print(f"  [RL ]  Best → {best}  "
+              f"SLA violation Q-Learning={self.rl['q_learning']['sla_violation_pct']:.2f}%  "
+              f"DQN={self.rl['dqn']['sla_violation_pct']:.2f}%")
+
+    # ── Cross-stage leaderboard ──────────────────────────────────────────────
+    def build_leaderboard(self) -> pd.DataFrame:
+        rows = []
+        if self.regression:
+            rows.append({'Stage': 'Regression',     'Best Approach': self.regression['best_model'],
+                          'Key Metric': f"R²={self.regression['test_r2']:.4f}"})
+        if self.classification:
+            rows.append({'Stage': 'Classification', 'Best Approach': self.classification['best_model'],
+                          'Key Metric': f"Acc={self.classification['test_acc']:.4f}"})
+        if self.clustering:
+            best_clu = max(self.clustering.items(), key=lambda kv: kv[1]['silhouette'])
+            rows.append({'Stage': 'Clustering',      'Best Approach': best_clu[0],
+                          'Key Metric': f"Silhouette={best_clu[1]['silhouette']:.4f}"})
+        if self.learning_theory:
+            rows.append({'Stage': 'Learning Theory', 'Best Approach': self.learning_theory.get('best_regulariser', '—'),
+                          'Key Metric': '—'})
+        if self.rl:
+            rows.append({'Stage': 'Reinforcement Learning', 'Best Approach': self.rl['best_agent'],
+                          'Key Metric': f"SLA viol={min(self.rl['q_learning']['sla_violation_pct'], self.rl['dqn']['sla_violation_pct']):.2f}%"})
+
+        df_leader = pd.DataFrame(rows)
+        print("\n" + "═" * 70)
+        print("  CROSS-STAGE LEADERBOARD")
+        print("═" * 70)
+        print(df_leader.to_string(index=False) if not df_leader.empty else "  (no stage results ingested yet)")
+        return df_leader
+
+    # ── Export ────────────────────────────────────────────────────────────────
+    def export_report(self, path: str = 'master_report.json') -> dict:
+        report = {
+            'regression':      self.regression,
+            'classification':  self.classification,
+            'clustering':      self.clustering,
+            'learning_theory': self.learning_theory,
+            'reinforcement_learning': self.rl,
+            'leaderboard':     self.build_leaderboard().to_dict(orient='records'),
+        }
+        with open(path, 'w') as f:
+            json.dump(report, f, indent=2, default=str)
+        print(f"\n  ✅ Master report exported → {path}")
+        return report
+
+
+# ==============================================================================
+# STAGE 5 — MAIN RUNNER
+# ==============================================================================
+
+def run_stage5(stage4_results: dict,
+               regression_df: pd.DataFrame = None,
+               classification_df: pd.DataFrame = None,
+               clustering_res: dict = None,
+               learning_theory_res: dict = None,
+               report_path: str = 'master_report.json') -> dict:
+    """
+    Aggregates whichever stage outputs are available and exports the
+    master JSON report. Only Stage 4 (RL) is required; the others are
+    optional so this can run standalone before teammates' results exist.
+    """
+    agg = ResultsAggregator()
+
+    if regression_df is not None:
+        agg.add_regression(regression_df)
+    if classification_df is not None:
+        agg.add_classification(classification_df)
+    if clustering_res is not None:
+        agg.add_clustering(clustering_res)
+    if learning_theory_res is not None:
+        agg.add_learning_theory(learning_theory_res)
+
+    agg.add_rl(stage4_results)
+
+    return agg.export_report(report_path)
+
+
+if __name__ == '__main__':
+    print("cloud_env.py loaded — call run_stage4(df) then run_stage5(results) "
+          "from your own runner script, or import them into the capstone notebook.")
